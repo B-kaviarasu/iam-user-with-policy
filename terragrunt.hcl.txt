@@ -1,0 +1,59 @@
+locals {
+  # Automatically load environment-level variables
+  environment_vars = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+
+  # Extract out common variables for reuse
+  app_environment = lower(local.environment_vars.locals.app_environment)
+}
+
+# Terragrunt will copy the Terraform configurations specified by the source parameter, along with any files in the
+# working directory, into a temporary folder, and execute your Terraform commands in that folder.
+terraform {
+  source = "git::ssh://git@bitbucket.deluxe.com:7999/dtf/aws-iam-user-with-policy//?ref=1.0.0"
+}
+
+dependency "common-tags" {
+  config_path = "${get_terragrunt_dir()}/../common-tags"
+}
+
+# Include all settings from the root terragrunt.hcl file
+include {
+  path = find_in_parent_folders()
+}
+
+# These are the variables we have to pass in to use the module specified in the terragrunt configuration above
+inputs = {
+  create_user = true
+  create_iam_user_login_profile = false
+  create_iam_access_key = true
+  name = "${local.app_environment}-database-backup"
+  create_policy = true
+  policy_name = "${local.app_environment}-database-backup-user-policy"
+  policy_statement = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "kms:CreateAlias",
+                "kms:CreateKey",
+                "kms:DeleteAlias",
+                "kms:Describe*",
+                "kms:GenerateRandom",
+                "kms:GenerateDataKey",
+                "kms:Get*",
+                "kms:List*",
+                "kms:TagResource",
+                "kms:UntagResource",
+                "iam:ListGroups",
+                "iam:ListRoles",
+                "iam:ListUsers"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+EOF
+  tags = merge({ "TerraformPath" = path_relative_to_include() }, dependency.common-tags.outputs.common_tags)
+}
